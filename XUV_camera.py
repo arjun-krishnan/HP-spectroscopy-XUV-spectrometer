@@ -32,8 +32,8 @@ class XUVSpectrometerGUI:
         
         # Initialize variables
         self.camera = None
-        #self.camera_name = "XUV Spectrometer (23840960)"
-        self.camera_name = "Basler Emulation (0815-0000)"
+        self.camera_name = "XUV Spectrometer (23840960)"
+#        self.camera_name = "Basler Emulation (0815-0000)" # Select this for testing
         self.wl_calibration_slope = 1/23.0315  # ~ 23 pixels per nm
         self.background_image = None
         self.bg_correction = False
@@ -224,7 +224,11 @@ class XUVSpectrometerGUI:
             self.camera.Open()
             self.camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
             
-            grab_result = self.camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
+            for _ in range(3):
+                grab_result = self.camera.RetrieveResult(1000, pylon.TimeoutHandling_ThrowException)
+                grab_result.Release()
+
+            grab_result = self.camera.RetrieveResult(10000, pylon.TimeoutHandling_ThrowException)
             if grab_result.GrabSucceeded():
                 image = grab_result.Array
                 self.roi_limits = self.ask_roi(image)
@@ -246,8 +250,11 @@ class XUVSpectrometerGUI:
         try:
             self.camera.Open()
             self.camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
-            
-            grab_result = self.camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
+            for _ in range(3):
+                grab_result = self.camera.RetrieveResult(1000, pylon.TimeoutHandling_ThrowException)
+                grab_result.Release()
+                
+            grab_result = self.camera.RetrieveResult(10000, pylon.TimeoutHandling_ThrowException)
             if grab_result.GrabSucceeded():
                 image = grab_result.Array
                 self.proj_limits = self.ask_proj_lims(image)
@@ -262,119 +269,75 @@ class XUVSpectrometerGUI:
             messagebox.showerror("Error", f"Failed to select projection limits: {str(e)}")
             
     def ask_roi(self, image):
-        # OpenCV ROI selection with dialog confirmation
-        cv2.namedWindow("Select ROI - Click and drag to select area", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Select ROI - Click and drag to select area", 800, 600)
+        # OpenCV ROI selection
+        #clone = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        image_norm = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        clone = cv2.cvtColor(image_norm, cv2.COLOR_GRAY2BGR)
+        ref_points = []
+        
+        def select_roi_callback(event, x, y, flags, param):
+            nonlocal ref_points
+            if event == cv2.EVENT_LBUTTONDOWN:
+                ref_points = [(x, y)]
+            elif event == cv2.EVENT_LBUTTONUP:
+                ref_points.append((x, y))
+                cv2.rectangle(clone, ref_points[0], ref_points[1], (0, 0, 255), 2)
+                cv2.imshow("Select ROI (Press y to save, r to reset, q to cancel)", clone)
+        
+        cv2.namedWindow("Select ROI (Press y to save, r to reset, q to cancel)", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Select ROI (Press y to save, r to reset, q to cancel)", 800, 600)
+        cv2.setMouseCallback("Select ROI (Press y to save, r to reset, q to cancel)", select_roi_callback)
         
         while True:
-            clone = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-            ref_points = []
-            selection_complete = False
+            cv2.imshow("Select ROI (Press y to save, r to reset, q to cancel)", clone)
+            key = cv2.waitKey(100) & 0xFF
             
-            def select_roi_callback(event, x, y, flags, param):
-                nonlocal ref_points, selection_complete
-                if event == cv2.EVENT_LBUTTONDOWN:
-                    ref_points = [(x, y)]
-                elif event == cv2.EVENT_LBUTTONUP:
-                    ref_points.append((x, y))
-                    cv2.rectangle(clone, ref_points[0], ref_points[1], (0, 0, 255), 2)
-                    cv2.imshow("Select ROI - Click and drag to select area", clone)
-                    selection_complete = True
-            
-            cv2.setMouseCallback("Select ROI - Click and drag to select area", select_roi_callback)
-            cv2.imshow("Select ROI - Click and drag to select area", clone)
-            
-            # Wait for selection
-            while not selection_complete:
-                key = cv2.waitKey(100) & 0xFF
-                if key == 27:  # ESC key
-                    cv2.destroyAllWindows()
-                    return None
-            
-            # Show confirmation dialog while keeping the image window open
-            if len(ref_points) == 2:
-                result = messagebox.askyesnocancel(
-                    "ROI Selection", 
-                    f"ROI selected: {ref_points}\n\nDo you want to confirm this selection?",
-                    icon='question'
-                )
-                
-                if result is True:  # Yes - Confirm
-                    cv2.destroyAllWindows()
-                    return ref_points
-                elif result is False:  # No - Retry
-                    continue
-                else:  # Cancel
-                    cv2.destroyAllWindows()
-                    return None
-            else:
-                retry = messagebox.askyesno(
-                    "Invalid Selection", 
-                    "No valid ROI selected. Would you like to try again?",
-                    icon='warning'
-                )
-                if not retry:
-                    cv2.destroyAllWindows()
-                    return None
+            if key == ord("r"):
+                clone = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+                ref_points = []
+            elif key == ord("y") and len(ref_points) == 2:
+                cv2.destroyAllWindows()
+                return ref_points
+            elif key == ord("q"):
+                cv2.destroyAllWindows()
+                return None
                 
     def ask_proj_lims(self, image):
-        # OpenCV projection limits selection with dialog confirmation
-        cv2.namedWindow("Select Projection Limits - Click and drag vertically", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Select Projection Limits - Click and drag vertically", 800, 600)
+        # OpenCV projection limits selection
+        #clone = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        image_norm = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        clone = cv2.cvtColor(image_norm, cv2.COLOR_GRAY2BGR)
+        proj_lims = []
+        xlim = clone.shape[1]
+        
+        def select_proj_callback(event, x, y, flags, param):
+            nonlocal proj_lims
+            if event == cv2.EVENT_LBUTTONDOWN:
+                proj_lims = [y]
+            elif event == cv2.EVENT_LBUTTONUP:
+                proj_lims.append(y)
+                proj_lims = sorted(proj_lims)
+                cv2.line(clone, (0, proj_lims[0]), (xlim, proj_lims[0]), (0, 0, 255), 2)
+                cv2.line(clone, (0, proj_lims[1]), (xlim, proj_lims[1]), (0, 0, 255), 2)
+                cv2.imshow("Select limits for projection (Press y to save, r to reset, q to cancel)", clone)
+        
+        cv2.namedWindow("Select limits for projection (Press y to save, r to reset, q to cancel)", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Select limits for projection (Press y to save, r to reset, q to cancel)", 800, 600)
+        cv2.setMouseCallback("Select limits for projection (Press y to save, r to reset, q to cancel)", select_proj_callback)
         
         while True:
-            clone = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-            proj_lims = []
-            xlim = clone.shape[1]
-            selection_complete = False
+            cv2.imshow("Select limits for projection (Press y to save, r to reset, q to cancel)", clone)
+            key = cv2.waitKey(100) & 0xFF
             
-            def select_proj_callback(event, x, y, flags, param):
-                nonlocal proj_lims, selection_complete
-                if event == cv2.EVENT_LBUTTONDOWN:
-                    proj_lims = [y]
-                elif event == cv2.EVENT_LBUTTONUP:
-                    proj_lims.append(y)
-                    proj_lims = sorted(proj_lims)
-                    cv2.line(clone, (0, proj_lims[0]), (xlim, proj_lims[0]), (0, 0, 255), 2)
-                    cv2.line(clone, (0, proj_lims[1]), (xlim, proj_lims[1]), (0, 0, 255), 2)
-                    cv2.imshow("Select Projection Limits - Click and drag vertically", clone)
-                    selection_complete = True
-            
-            cv2.setMouseCallback("Select Projection Limits - Click and drag vertically", select_proj_callback)
-            cv2.imshow("Select Projection Limits - Click and drag vertically", clone)
-            
-            # Wait for selection
-            while not selection_complete:
-                key = cv2.waitKey(100) & 0xFF
-                if key == 27:  # ESC key
-                    cv2.destroyAllWindows()
-                    return None
-            
-            # Show confirmation dialog while keeping the image window open
-            if len(proj_lims) == 2:
-                result = messagebox.askyesnocancel(
-                    "Projection Limits Selection", 
-                    f"Projection limits selected: {proj_lims}\n\nDo you want to confirm this selection?",
-                    icon='question'
-                )
-                
-                if result is True:  # Yes - Confirm
-                    cv2.destroyAllWindows()
-                    return proj_lims
-                elif result is False:  # No - Retry
-                    continue
-                else:  # Cancel
-                    cv2.destroyAllWindows()
-                    return None
-            else:
-                retry = messagebox.askyesno(
-                    "Invalid Selection", 
-                    "No valid projection limits selected. Would you like to try again?",
-                    icon='warning'
-                )
-                if not retry:
-                    cv2.destroyAllWindows()
-                    return None
+            if key == ord("r"):
+                clone = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+                proj_lims = []
+            elif key == ord("y") and len(proj_lims) == 2:
+                cv2.destroyAllWindows()
+                return proj_lims
+            elif key == ord("q"):
+                cv2.destroyAllWindows()
+                return None
                 
     def toggle_recording(self):
         if self.is_recording:
@@ -505,8 +468,8 @@ class XUVSpectrometerGUI:
             self.camera.Close()
             # Reset EPICS signals
             try:
-                epics2.caput('fel-lab-signal', 0.0)
-                epics2.caput('fel-lab-signal2', 0.0)
+                epics.caput('fel-lab-signal', 0.0)
+                epics.caput('fel-lab-signal2', 0.0)
             except:
                 pass
             self.is_viewing = False
@@ -524,10 +487,10 @@ class XUVSpectrometerGUI:
         
         # Update EPICS PVs
         try:
-            epics2.caput('fel-xuv-mcp-row', projection)
-            epics2.caput('fel-lab-signal', roi_avg)
-            epics2.caput('fel-lab-signal2', roi_avg)
-            wl0 = epics2.caget('fel-xuv-grating-wavelength')
+            epics.caput('fel-xuv-mcp-row', projection)
+            epics.caput('fel-lab-signal', roi_avg)
+            epics.caput('fel-lab-signal2', roi_avg)
+            wl0 = epics.caget('fel-xuv-grating-wavelength')
         except:
             wl0 = 0  # Fallback if EPICS is not available
         
@@ -588,29 +551,29 @@ class XUVSpectrometerGUI:
         """Get parameters from EPICS"""
         try:
             params = {
-                "modulator1": epics22.caget('de-u250-modulator1-i:set.OVAL'),
-                "modulator2": epics2.caget('de-u250-modulator2-i:set.OVAL'),
-                "radiator": epics2.caget('de-u250-radiator-i:set.OVAL'),
-                "chicane1": epics2.caget('de-u250-schikane1-i:set.OVAL'),
-                "chicane2": epics2.caget('de-u250-schikane2-i:set.OVAL'),
-                "delta1": epics2.caget('de-u250-delta1-i:set.OVAL'),
-                "delta2": epics2.caget('de-u250-delta2-i:set.OVAL'),
-                "delta3": epics2.caget('de-u250-delta3-i:set.OVAL'),
-                "delta4": epics2.caget('de-u250-delta4-i:set.OVAL'),
-                "THz1": epics2.caget('fel-THz-signal'),
-                "THz2": epics2.caget('fel-THz-signal2'),
-                "CHG": epics2.caget('fel-lab-signal'),
-                "XUV_spectra": epics2.caget('fel-xuv-mcp-row').tolist(),
-                "XUV_wavelength": epics2.caget('fel-xuv-grating-wavelength'),
-                "delaystage": epics2.caget('fel-m1-meas-x'),
-                "vectormod": epics2.caget('fel-vm-readdelay'),
-                "m1x": epics2.caget('fel-seed-m1x_POSITION_MONITOR'),
-                "m1y": epics2.caget('fel-seed-m1y_POSITION_MONITOR'),
-                "m2x": epics2.caget('fel-seed-m2x_POSITION_MONITOR'),
-                "m2y": epics2.caget('fel-seed-m2y_POSITION_MONITOR'),
-                "beamcurrent": epics2.caget('share-de-beam-i'),
-                "BPM14x": epics2.caget('de-bpm14-x'),
-                "BPM15x": epics2.caget('de-bpm15-x'),
+                "modulator1": epics.caget('de-u250-modulator1-i:set.OVAL'),
+                "modulator2": epics.caget('de-u250-modulator2-i:set.OVAL'),
+                "radiator": epics.caget('de-u250-radiator-i:set.OVAL'),
+                "chicane1": epics.caget('de-u250-schikane1-i:set.OVAL'),
+                "chicane2": epics.caget('de-u250-schikane2-i:set.OVAL'),
+                "delta1": epics.caget('de-u250-delta1-i:set.OVAL'),
+                "delta2": epics.caget('de-u250-delta2-i:set.OVAL'),
+                "delta3": epics.caget('de-u250-delta3-i:set.OVAL'),
+                "delta4": epics.caget('de-u250-delta4-i:set.OVAL'),
+                "THz1": epics.caget('fel-THz-signal'),
+                "THz2": epics.caget('fel-THz-signal2'),
+                "CHG": epics.caget('fel-lab-signal'),
+                "XUV_spectra": epics.caget('fel-xuv-mcp-row').tolist(),
+                "XUV_wavelength": epics.caget('fel-xuv-grating-wavelength'),
+                "delaystage": epics.caget('fel-m1-meas-x'),
+                "vectormod": epics.caget('fel-vm-readdelay'),
+                "m1x": epics.caget('fel-seed-m1x_POSITION_MONITOR'),
+                "m1y": epics.caget('fel-seed-m1y_POSITION_MONITOR'),
+                "m2x": epics.caget('fel-seed-m2x_POSITION_MONITOR'),
+                "m2y": epics.caget('fel-seed-m2y_POSITION_MONITOR'),
+                "beamcurrent": epics.caget('share-de-beam-i'),
+                "BPM14x": epics.caget('de-bpm14-x'),
+                "BPM15x": epics.caget('de-bpm15-x'),
             }
         except Exception as e:
             print(f"Error reading EPICS parameters: {e}")
