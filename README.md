@@ -1,4 +1,4 @@
-\# XUV Spectrometer Control Dashboard
+# XUV Spectrometer Control Dashboard
 
 
 
@@ -6,7 +6,7 @@ A modular Python GUI for the HP Spectroscopy XUV system. It integrates live Basl
 
 
 
-\## Project Structure
+## Project Structure
 
 ```text
 
@@ -28,15 +28,15 @@ xuv\_project/
 
 └── gui/                   # User interface layer
 
-&#x20;   ├── \_\_init\_\_.py
+    ├── \_\_init\_\_.py
 
-&#x20;   └── main\_window.py     # Main Tkinter application
+    └── main\_window.py     # Main Tkinter application
 
 ```
 
 
 
-\## Requirements
+## Requirements
 
 Ensure your hardware is connected (Basler camera via network/USB, Xeryon controller on COM4), and the proprietary Xeryon Python SDK is accessible to your environment.
 
@@ -52,7 +52,7 @@ pip install opencv-python pypylon numpy matplotlib pyepics
 
 ```
 
-\## Usage
+## Usage
 
 To launch the application, navigate to the root directory and run:
 
