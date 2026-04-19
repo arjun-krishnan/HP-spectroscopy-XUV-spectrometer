@@ -22,7 +22,7 @@ from tkinter import ttk, messagebox, filedialog
 import threading
 from PIL import Image, ImageTk
 from matplotlib.figure import Figure
-#from Xeryon import *
+from Xeryon import *
 
 
 class CombinedXUVGUI:
